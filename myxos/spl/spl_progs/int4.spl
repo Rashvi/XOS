@@ -1,0 +1,83 @@
+alias physicalSP S0;
+physicalSP = ([PTBR + 2 * (SP / 512)] * 512) + (SP % 512);
+alias sysCallNo S1;
+sysCallNo = [physicalSP - 1];
+alias fileDesc S2;
+alias currentPID S3;
+currentPID = (PTBR - 1024) / 8;
+alias currentPCB S12;
+currentPCB = READY_LIST + (currentPID * 32);
+alias PSWOFT S4;
+alias lsk S5;
+fileDesc = [physicalSP - 4];
+alias wordToWrite S13;
+wordToWrite = [physicalSP - 3];
+
+print "Write called";
+breakpoint;
+
+if(sysCallNo == 5) then
+
+	if(fileDesc < 0 || fileDesc > 7) then
+		print "wrong desc";		
+		breakpoint;
+		[physicalSP - 2] = -1;
+		ireturn;
+	endif;
+
+	if([currentPCB + 15 + fileDesc*2] == -1) then
+		print "wrong PPOFT";		
+		breakpoint;
+		[physicalSP - 2] = -1;
+		ireturn;
+	else
+		PSWOFT = [currentPCB + 15 + fileDesc*2];
+		lsk = [currentPCB + 15 + fileDesc*2 + 1];
+	endif;
+	alias count S6;
+	count = 0;
+	alias fatentry S7;
+
+	fatentry = [FILE_TABLE + (PSWOFT * 2)] * 8 + FAT;
+	alias bb S8;
+	bb = [fatentry+2];
+	load(1,bb);
+	count = 0;
+	alias blocknumber S9;
+	blocknumber = lsk/512;
+	if([SCRATCHPAD + blocknumber] == -1) then
+		 alias dfl S10;	
+		dfl = 0;
+		while(dfl < 447) do
+			if([FAT + 512 + dfl] == 0) then
+				break;
+			endif;
+			dfl = dfl+1;
+		endwhile;
+		if(dfl == 447) then
+			[physicalSP - 2] = -1;
+			ireturn;
+		endif;
+		[FAT + 512 + dfl] = 1;
+		[SCRATCHPAD + blocknumber] = dfl;
+		store(1,[fatentry + 2]);
+		[fatentry + 1] = [fatentry + 1] + 512;
+		store(5,19);
+		store(6,20);
+	endif;
+	load(1,bb);
+	alias blockWrite S11;
+
+	blockWrite = [SCRATCHPAD + blocknumber];
+	load(1,blockWrite);
+	
+	breakpoint;
+	[SCRATCHPAD + lsk % 512] = wordToWrite;
+	print (wordToWrite);
+	store(1,blockWrite);
+	[currentPCB + 15 + fileDesc*2 + 1] = [currentPCB + 15 + fileDesc*2 + 1] + 1;
+	[physicalSP - 2] = 0;
+	ireturn;
+endif;
+
+		
